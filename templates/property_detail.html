@@ -5,17 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ property['name'] }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .property-images img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="property-detail">
         <h1>{{ property['name'] }}</h1>
         <p><strong>Location:</strong> {{ property['location'] }}</p>
         <p><strong>Description:</strong> {{ property['description'] | safe }}</p>
-        <p><strong>Price:</strong> {{ property['price']['price'] }} {{ property['price']['currency'] }}</p>
-        <p><strong>Agent:</strong> {{ property['agent']['name'] }}</p>
+        <p><strong>Price/Rent:</strong> {{ property['price_amount'] }} {{ property['price_currency'] }}</p>
+        <p><strong>Agent:</strong> {{ property['agent'] }}</p>
+        <div class="property-images">
+            <h2>Images</h2>
+            {% for image in property['images'] %}
+            <img src="{{ image }}" alt="Property Image">
+            {% endfor %}
+        </div>
         <a href="{{ url_for('index') }}">Back to Recommendations</a>
     </div>
 </body>
 </html>
+
 
 
