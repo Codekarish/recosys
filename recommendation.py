@@ -137,24 +137,35 @@ def parse_query(query):
     bedrooms = None
     location = None
     agent_name = None
+    submission_type = None
 
+    # Extract price
     price_match = re.search(r'(\d+)\s*(ksh|kes|shillings|sh)', query, re.IGNORECASE)
     if price_match:
         price = int(price_match.group(1))
 
+    # Extract number of bedrooms
     bedrooms_match = re.search(r'(\d+)\s*(bedroom|bedrooms)', query, re.IGNORECASE)
     if bedrooms_match:
         bedrooms = int(bedrooms_match.group(1))
 
-    location_match = re.search(r'at\s*([\w\s]+)', query, re.IGNORECASE)
+    # Extract location
+    location_match = re.search(r'in\s*([\w\s]+)', query, re.IGNORECASE)
     if location_match:
         location = location_match.group(1).strip().lower()
 
+    # Extract agent name
     agent_match = re.search(r'agent\s*([\w\s]+)', query, re.IGNORECASE)
     if agent_match:
         agent_name = agent_match.group(1).strip().lower()
 
-    return price, bedrooms, location, agent_name
+    # Extract submission type
+    if 'rent' in query.lower():
+        submission_type = 'rent'
+    elif 'sale' in query.lower():
+        submission_type = 'sale'
+
+    return price, bedrooms, location, agent_name, submission_type
 
 def get_lat_lon(location):
     url = f'https://api.opencagedata.com/geocode/v1/json?q={location}&key={OPENCAGE_API_KEY}'
@@ -169,8 +180,12 @@ def get_distance(loc1, loc2):
 
 def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=25):
     # Parse the query
-    price, bedrooms, location, agent_name, submission_type = parse_query(query)  # Include submission_type
-    
+    try:
+        price, bedrooms, location, agent_name, submission_type = parse_query(query)
+    except ValueError:
+        # Handle cases where parse_query returns fewer values
+        price, bedrooms, location, agent_name, submission_type = (None, None, None, None, None)
+
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
