@@ -181,7 +181,9 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     # Filter by price range if provided
     if price:
         df['price_amount'] = df['amount']  # Assuming 'amount' is the price field in your DataFrame
-        df = df[(df['price_amount'] <= price * 1.1) & (df['price_amount'] >= price * 0.9)]
+        lower_bound = price * 0.5
+        upper_bound = price * 1.5
+        df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
         # Recompute similarities after filtering
         filtered_indices = df.index
         similarities = similarities[filtered_indices]
@@ -202,21 +204,21 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Prioritize by agent name if provided
     if agent_name:
-        if 'agent_name' in df.columns:
-            df['agent_match'] = df['agent_name'].apply(lambda x: x.strip().lower() if pd.notnull(x) else 'unknown')
-            df = df[df['agent_match'] == agent_name]
+        if 'agent' in df.columns:
+            df['agent_name'] = df['agent'].apply(lambda x: x['name'].strip().lower() if pd.notnull(x) else 'unknown')
+            df = df[df['agent_name'] == agent_name]
 
     # Apply weights to the similarity scores
     weights = {
-        'location': 5,
-        'property_type': 4,
-        'size': 3,
-        'submission_type': 2,
-        'price': 1,
-        'creation_date': 0.5,
-        'property_setting': 0.5,
-        'customer_modifiers': 0.5,
-        'user_metrics': 0.5,
+        'location': 45,
+        'property_type': 20,
+        'size':15 ,
+        'submission_type': 5,
+        'price': 15,
+        'creation_date': 4,
+        'property_setting': 5,
+        'customer_modifiers': 3,
+        'user_metrics': 5,
     }
 
     weighted_similarities = similarities.copy()
@@ -254,8 +256,8 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     recommendations['description'] = recommendations['description'].apply(lambda x: ' '.join(x.split()[:100]) + ('...' if len(x.split()) > 100 else ''))
 
-    if 'agent_name' in recommendations.columns:
-        recommendations['agent'] = recommendations['agent_name']
+    if 'agent' in recommendations.columns:
+        recommendations['agent'] = recommendations['agent'].apply(lambda x: x['name'] if pd.notnull(x) else 'Unknown')
     else:
         recommendations['agent'] = 'Unknown'
 
@@ -264,6 +266,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
 
     return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
+
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
