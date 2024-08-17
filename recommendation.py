@@ -235,6 +235,14 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
             df = df[df['agent_name'] == agent_name]
     print(f"DataFrame shape after agent name filtering: {df.shape}")
 
+    # Ensure DataFrame is not empty before applying similarities
+    if df.empty:
+        return []
+
+    # Recompute similarities with the filtered DataFrame
+    filtered_indices = df.index
+    weighted_similarities = similarities[filtered_indices]
+    
     # Apply weights to the similarity scores
     weights = {
         'location': 40,
@@ -248,9 +256,6 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         'user_metrics': 0.5,
     }
 
-    weighted_similarities = similarities.copy()
-
-    # Apply weights
     for i, row in df.iterrows():
         if 'location' in query_keywords and 'location' in df.columns:
             weighted_similarities[i] += weights['location'] * 0.1
@@ -271,9 +276,10 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         if 'user_metrics' in query_keywords and 'user_metrics' in df.columns:
             weighted_similarities[i] += weights['user_metrics'] * 0.05
 
-    # Ensure that we don't attempt to access out-of-bounds indices
+    # Ensure indices are within bounds
     if len(weighted_similarities) > 0:
         indices = weighted_similarities.argsort()[-k:][::-1]
+        indices = [i for i in indices if i < len(df)]  # Filter out-of-bounds indices
         recommendations = df.iloc[indices].copy()
         recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
 
@@ -297,6 +303,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
     else:
         return []
+
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
