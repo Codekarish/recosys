@@ -25,7 +25,7 @@ OPENCAGE_API_KEY = 'dd29b25918284b32a3f12bd68ebecae8'
 # OpenAI API key
 OPENAI_API_KEY = 'sk-proj-pHkywA2mDUiHGcCWRM4TT3BlbkFJz3qlbeGgfG8C70iHX7WK'
 
-def fetch_data(url, params, min_results=100):
+def fetch_data(url, params, min_results=20):
     all_properties = []
     current_page = 1
     while len(all_properties) < min_results:
@@ -167,7 +167,7 @@ def get_lat_lon(location):
 def get_distance(loc1, loc2):
     return geodesic(loc1, loc2).km
 
-def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=100):
+def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=25):
     # Parse the query
     price, bedrooms, location, agent_name = parse_query(query)
     query_keywords = extract_keywords(query)
@@ -178,24 +178,16 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     if len(similarities) != len(df):
         raise ValueError("Length of similarities does not match length of DataFrame")
 
-    # Normalize and adjust price/rent handling
-    if price:
-        if 'amount' in df.columns:
-            df['price_amount'] = df['amount']
-        elif 'price' in df.columns:
-            df['price_amount'] = df['price']
-        elif 'rent' in df.columns:
-            df['price_amount'] = df['rent']
-        elif 'sale' in df.columns:
-            df['price_amount'] = df['sale']
-        else:
-            raise KeyError("No valid price column found in DataFrame")
+    # Handle missing price field
+    df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount']) 
+                                  else (row['sale_price'] if 'sale_price' in row and pd.notnull(row['sale_price'])
+                                  else (row['rent'] if 'rent' in row and pd.notnull(row['rent']) else None)), axis=1)
 
-        # Apply the price range filter
+    # Filter by price range if provided
+    if price:
         lower_bound = price * 0.5
         upper_bound = price * 1.5
         df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
-        
         # Recompute similarities after filtering
         filtered_indices = df.index
         similarities = similarities[filtered_indices]
@@ -222,11 +214,11 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Apply weights to the similarity scores
     weights = {
-        'location': 5,
-        'property_type': 4,
-        'size': 3,
-        'submission_type': 2,
-        'price': 1,
+        'location': 40,
+        'property_type': 20,
+        'size': 10,
+        'submission_type': 10,
+        'price': 25,
         'creation_date': 0.5,
         'property_setting': 0.5,
         'customer_modifiers': 0.5,
@@ -245,7 +237,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
             weighted_similarities[i] += weights['size'] * 0.1
         if 'submission_type' in query_keywords and 'submission_type' in df.columns:
             weighted_similarities[i] += weights['submission_type'] * 0.1
-        if 'price' in query_keywords:
+        if 'price' in query_keywords and 'price_amount' in df.columns:
             weighted_similarities[i] += weights['price'] * 0.1
         if 'creation_date' in query_keywords and 'created_at' in df.columns:
             weighted_similarities[i] += weights['creation_date'] * 0.05
@@ -283,7 +275,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
     params = {'per page': 300, }
-    min_results = 100
+    min_results = 20
     data = fetch_data(url, params, min_results)
     print("\nData fetched successfully.")
     
