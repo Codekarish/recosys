@@ -168,6 +168,7 @@ def get_distance(loc1, loc2):
     return geodesic(loc1, loc2).km
 
 def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=100):
+    # Parse the query
     price, bedrooms, location, agent_name = parse_query(query)
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
@@ -179,7 +180,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Filter by price range if provided
     if price:
-        df['price_amount'] = df['price'].apply(lambda x: x['price'] if isinstance(x, dict) and 'price' in x else 0)
+        df['price_amount'] = df['amount']  # Assuming 'amount' is the price field in your DataFrame
         df = df[(df['price_amount'] <= price * 1.1) & (df['price_amount'] >= price * 0.9)]
         # Recompute similarities after filtering
         filtered_indices = df.index
@@ -201,8 +202,8 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Prioritize by agent name if provided
     if agent_name:
-        if 'agent' in df.columns:
-            df['agent_match'] = df['agent'].apply(lambda x: x['name'].strip().lower() if isinstance(x, dict) and 'name' in x else 'unknown')
+        if 'agent_name' in df.columns:
+            df['agent_match'] = df['agent_name'].apply(lambda x: x.strip().lower() if pd.notnull(x) else 'unknown')
             df = df[df['agent_match'] == agent_name]
 
     # Apply weights to the similarity scores
@@ -246,15 +247,23 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
 
     # Extract and format data
-    if 'agent' in recommendations.columns:
-        recommendations['agent_name'] = recommendations['agent'].apply(lambda x: x['name'] if isinstance(x, dict) and 'name' in x else 'Unknown')
-    if 'price' in recommendations.columns:
-        recommendations['price_amount'] = recommendations['price'].apply(lambda x: x['price'] if isinstance(x, dict) and 'price' in x else 'N/A')
-        recommendations['price_label'] = recommendations['price'].apply(lambda x: x['label'] if isinstance(x, dict) and 'label' in x else '')
-        recommendations['price_currency'] = recommendations['price'].apply(lambda x: x['currency'] if isinstance(x, dict) and 'currency' in x else 'N/A')
-    recommendations['formatted_description'] = recommendations.apply(lambda row: format_description(row['description'], row['id']), axis=1)
+    if 'images' in recommendations.columns:
+        recommendations['image'] = recommendations['images'].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else 'No Image')
+    else:
+        recommendations['image'] = 'No Image'
 
-    return recommendations[['id', 'submission_type', 'bedrooms', 'agent_name', 'price_amount', 'price_label', 'price_currency', 'formatted_description', 'score']].to_dict('records')
+    recommendations['description'] = recommendations['description'].apply(lambda x: ' '.join(x.split()[:100]) + ('...' if len(x.split()) > 100 else ''))
+
+    if 'agent_name' in recommendations.columns:
+        recommendations['agent'] = recommendations['agent_name']
+    else:
+        recommendations['agent'] = 'Unknown'
+
+    recommendations['location'] = recommendations['location'].apply(lambda x: x if pd.notnull(x) else 'Unknown')
+
+    recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
+
+    return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
