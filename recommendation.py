@@ -169,7 +169,8 @@ def get_distance(loc1, loc2):
 
 def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=25):
     # Parse the query
-    price, bedrooms, location, agent_name = parse_query(query)
+    price, bedrooms, location, agent_name, submission_type = parse_query(query)  # Include submission_type
+    
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
@@ -178,10 +179,13 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     if len(similarities) != len(df):
         raise ValueError("Length of similarities does not match length of DataFrame")
 
-    # Handle missing price field
+    # Handle missing price field and apply submission type filter
     df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount']) 
                                   else (row['sale_price'] if 'sale_price' in row and pd.notnull(row['sale_price'])
                                   else (row['rent'] if 'rent' in row and pd.notnull(row['rent']) else None)), axis=1)
+
+    if submission_type:
+        df = df[df['submission_type'].str.lower() == submission_type.lower()]
 
     # Filter by price range if provided
     if price:
@@ -270,6 +274,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
 
     return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
+
 
 
 def main(query):
