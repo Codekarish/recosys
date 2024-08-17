@@ -181,10 +181,6 @@ def get_distance(loc1, loc2):
 def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=25):
     # Parse the query
     price, bedrooms, location, agent_name, submission_type = parse_query(query)
-    
-    # Print the captured parameters for debugging
-    print(f"Captured Parameters:\nPrice: {price}\nBedrooms: {bedrooms}\nLocation: {location}\nAgent Name: {agent_name}\nSubmission Type: {submission_type}")
-
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
@@ -194,29 +190,27 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         raise ValueError("Length of similarities does not match length of DataFrame")
 
     # Handle missing price field
-    df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount'])
+    df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount']) 
                                   else (row['sale_price'] if 'sale_price' in row and pd.notnull(row['sale_price'])
                                   else (row['rent'] if 'rent' in row and pd.notnull(row['rent']) else None)), axis=1)
 
-    # Filter out rows with inconsistent dimensionality
-    # For example, if 'features' column is a high-dimensional array, filter out rows with non-comparable data
-    df = df[df['features'].apply(lambda x: isinstance(x, (list, np.ndarray)) and len(x) == len(query_vector.toarray()[0]))]
-    
-    # Check if we have any rows left after filtering
-    if df.empty:
-        return []  # No recommendations if DataFrame is empty
+    # Print captured parameters for debugging
+    print(f"Captured Parameters:\nPrice: {price}\nBedrooms: {bedrooms}\nLocation: {location}\nAgent Name: {agent_name}\nSubmission Type: {submission_type}")
+
+    # Apply submission type filter if provided
+    if submission_type:
+        df = df[df['submission_type'].str.lower() == submission_type.lower()]
+    print(f"DataFrame shape after submission type filtering: {df.shape}")
 
     # Filter by price range if provided
     if price:
         lower_bound = price * 0.5
         upper_bound = price * 1.5
         df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
-        print(f"DataFrame shape after price filtering: {df.shape}")
-
-    # Filter by submission type if provided
-    if submission_type:
-        df = df[df['submission_type'].str.lower() == submission_type.lower()]
-        print(f"DataFrame shape after submission type filtering: {df.shape}")
+        # Recompute similarities after filtering
+        filtered_indices = df.index
+        similarities = similarities[filtered_indices]
+    print(f"DataFrame shape after price filtering: {df.shape}")
 
     # Calculate distances if location is provided
     if location:
@@ -225,21 +219,21 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
             user_location = (user_lat, user_lon)
             df['distance'] = df.apply(lambda row: get_distance(user_location, (row['lat'], row['lon'])), axis=1)
             df = df.sort_values(by='distance')
-        print(f"DataFrame shape after location filtering: {df.shape}")
+    print(f"DataFrame shape after location filtering: {df.shape}")
 
     # Prioritize by number of bedrooms if provided
     if bedrooms:
         if 'bedrooms' in df.columns:
             df['bedroom_diff'] = df['bedrooms'].apply(lambda x: abs(x - bedrooms) if pd.notnull(x) else np.nan)
             df = df.sort_values(by='bedroom_diff')
-        print(f"DataFrame shape after bedrooms filtering: {df.shape}")
+    print(f"DataFrame shape after bedrooms filtering: {df.shape}")
 
     # Prioritize by agent name if provided
     if agent_name:
         if 'agent' in df.columns:
             df['agent_name'] = df['agent'].apply(lambda x: x['name'].strip().lower() if pd.notnull(x) else 'unknown')
             df = df[df['agent_name'] == agent_name]
-        print(f"DataFrame shape after agent name filtering: {df.shape}")
+    print(f"DataFrame shape after agent name filtering: {df.shape}")
 
     # Apply weights to the similarity scores
     weights = {
@@ -277,35 +271,32 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         if 'user_metrics' in query_keywords and 'user_metrics' in df.columns:
             weighted_similarities[i] += weights['user_metrics'] * 0.05
 
-    # Debugging info
-    print(f"Length of weighted_similarities: {len(weighted_similarities)}")
-    if len(weighted_similarities) < k:
-        k = len(weighted_similarities)
-    indices = np.argsort(weighted_similarities)[-k:][::-1]
-    print(f"Selected indices: {indices}")
-    if indices.max() >= len(df):
-        raise IndexError("Selected indices exceed DataFrame bounds")
-    recommendations = df.iloc[indices].copy()
-    recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
+    # Ensure that we don't attempt to access out-of-bounds indices
+    if len(weighted_similarities) > 0:
+        indices = weighted_similarities.argsort()[-k:][::-1]
+        recommendations = df.iloc[indices].copy()
+        recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
 
-    # Extract and format data
-    if 'images' in recommendations.columns:
-        recommendations['image'] = recommendations['images'].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else 'No Image')
+        # Extract and format data
+        if 'images' in recommendations.columns:
+            recommendations['image'] = recommendations['images'].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else 'No Image')
+        else:
+            recommendations['image'] = 'No Image'
+
+        recommendations['description'] = recommendations['description'].apply(lambda x: ' '.join(x.split()[:100]) + ('...' if len(x.split()) > 100 else ''))
+
+        if 'agent' in recommendations.columns:
+            recommendations['agent'] = recommendations['agent'].apply(lambda x: x['name'] if pd.notnull(x) else 'Unknown')
+        else:
+            recommendations['agent'] = 'Unknown'
+
+        recommendations['location'] = recommendations['location'].apply(lambda x: x if pd.notnull(x) else 'Unknown')
+
+        recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
+
+        return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
     else:
-        recommendations['image'] = 'No Image'
-
-    recommendations['description'] = recommendations['description'].apply(lambda x: ' '.join(x.split()[:100]) + ('...' if len(x.split()) > 100 else ''))
-
-    if 'agent' in recommendations.columns:
-        recommendations['agent'] = recommendations['agent'].apply(lambda x: x['name'] if pd.notnull(x) else 'Unknown')
-    else:
-        recommendations['agent'] = 'Unknown'
-
-    recommendations['location'] = recommendations['location'].apply(lambda x: x if pd.notnull(x) else 'Unknown')
-
-    recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
-
-    return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
+        return []
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
