@@ -180,13 +180,20 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Filter by price range if provided
     if price:
-        df['price_amount'] = df['amount']  # Assuming 'amount' is the price field in your DataFrame
-        lower_bound = price * 0.5
-        upper_bound = price * 1.5
-        df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
-        # Recompute similarities after filtering
-        filtered_indices = df.index
-        similarities = similarities[filtered_indices]
+        # Check if 'amount', 'price', 'rent', or 'sale' columns are present
+        price_columns = [col for col in ['amount', 'price', 'rent', 'sale'] if col in df.columns]
+        if price_columns:
+            price_column = price_columns[0]  # Use the first available price column
+            df['price_amount'] = df[price_column]
+            lower_bound = price * 0.5
+            upper_bound = price * 1.5
+            df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
+            # Recompute similarities after filtering
+            filtered_indices = df.index
+            similarities = similarities[filtered_indices]
+        else:
+            # Handle case where no price column is found
+            print("No recognized price column found in the DataFrame.")
 
     # Calculate distances if location is provided
     if location:
@@ -210,15 +217,15 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Apply weights to the similarity scores
     weights = {
-        'location': 45,
-        'property_type': 20,
-        'size':15 ,
-        'submission_type': 5,
-        'price': 15,
-        'creation_date': 4,
-        'property_setting': 5,
-        'customer_modifiers': 3,
-        'user_metrics': 5,
+        'location': 5,
+        'property_type': 4,
+        'size': 3,
+        'submission_type': 2,
+        'price': 1,
+        'creation_date': 0.5,
+        'property_setting': 0.5,
+        'customer_modifiers': 0.5,
+        'user_metrics': 0.5,
     }
 
     weighted_similarities = similarities.copy()
@@ -265,8 +272,14 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     recommendations['ID'] = recommendations['id'].apply(lambda x: f'<a href="/property/{x}">{x}</a>')
 
-    return recommendations[['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']].to_dict('records')
-
+    # Ensure all required columns are present in the final DataFrame
+    required_columns = ['ID', 'image', 'submission_type', 'bedrooms', 'agent', 'location', 'price_amount', 'description', 'score']
+    missing_columns = [col for col in required_columns if col not in recommendations.columns]
+    if missing_columns:
+        for col in missing_columns:
+            recommendations[col] = 'Data not available'
+    
+    return recommendations[required_columns].to_dict('records')
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
