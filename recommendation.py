@@ -219,26 +219,34 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     results['description'] = results.apply(lambda row: format_description(row['description'], row['id']), axis=1)
     return results
 
-def main():
-    url = 'https://api.example.com/properties'
-    params = {'status': 'available', 'per_page': 100}
+def main(query):
+    url = 'https://sapi.hauzisha.co.ke/api/properties/search'
+    params = {'per page': 300, }
     min_results = 100
     data = fetch_data(url, params, min_results)
     print("\nData fetched successfully.")
+    
     cleaned_data = clean_data(data)
     print("\nData cleaned successfully.")
+    
     converted_data = convert_bedrooms_to_integers(cleaned_data)
     print("\nBedroom data converted successfully.")
-    query = "2 bedroom house for sale in Kilimani for 10,000,000 KES"
+    
     vectorizer, tfidf_matrix = preprocess_text(converted_data, extract_keywords(query))
     print("\nText data preprocessed successfully.")
+    
     encoder, encoded_categorical_data = encode_categorical_data(converted_data)
     print("\nCategorical data encoded successfully.")
+    
     combined_data = combine_features(tfidf_matrix, encoded_categorical_data)
     print("\nFeatures combined successfully.")
+    
     recommendations = get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, converted_data)
     print("\nRecommendations generated successfully.")
-    print(recommendations)
+    
+    # Return the recommendations instead of printing them
+    return recommendations
 
 if __name__ == "__main__":
-    main()
+    query = "2 bedroom house for sale in Kilimani for 10,000,000 KES"  # Example query
+    main(query)
