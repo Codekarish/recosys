@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Recommendations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Property Recommendations</h1>
+        <form method="post">
+            <input type="text" name="query" value="{{ query }}" placeholder="Enter your search query">
+            <button type="submit">Search</button>
+        </form>
+
+        {% if recommendations %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Property ID</th>
+                    <th>Submission Type</th>
+                    <th>Bedrooms</th>
+                    <th>Agent</th>
+                    <th>Price/Rent</th>
+                    <th>Description</th>
+                    <th>Ranking</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in recommendations %}
+                <tr>
+                    <td>{{ rec['id'] }}</td>
+                    <td>{{ rec['submission_type'] }}</td>
+                    <td>{{ rec['bedrooms'] }}</td>
+                    <td>{{ rec['agent_name'] }}</td>
+                    <td>{{ rec['price_amount'] }} {{ rec['price_label'] }} ({{ rec['price_currency'] }})</td>
+                    <td>{{ rec['formatted_description'] | safe }}</td>
+                    <td>{{ rec['score'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No recommendations found. Please enter a search query.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
+
+
+
+
+
+
