@@ -18,24 +18,28 @@
         <table>
             <thead>
                 <tr>
-                    <th>Property ID</th>
+                    <th>ID</th>
+                    <th>Image</th>
                     <th>Submission Type</th>
                     <th>Bedrooms</th>
                     <th>Agent</th>
+                    <th>Location</th>
                     <th>Price/Rent</th>
                     <th>Description</th>
-                    <th>Ranking</th>
+                    <th>Score</th>
                 </tr>
             </thead>
             <tbody>
                 {% for rec in recommendations %}
                 <tr>
-                    <td>{{ rec['id'] }}</td>
+                    <td><a href="/property/{{ rec['id'] }}">{{ rec['id'] }}</a></td>
+                    <td><img src="{{ rec['image'] }}" alt="Property Image" style="max-width: 150px; max-height: 100px;"></td>
                     <td>{{ rec['submission_type'] }}</td>
                     <td>{{ rec['bedrooms'] }}</td>
-                    <td>{{ rec['agent_name'] }}</td>
-                    <td>{{ rec['price_amount'] }} {{ rec['price_label'] }} ({{ rec['price_currency'] }})</td>
-                    <td>{{ rec['formatted_description'] | safe }}</td>
+                    <td>{{ rec['agent'] }}</td>
+                    <td>{{ rec['location'] }}</td>
+                    <td>{{ rec['price_amount'] }}</td>
+                    <td>{{ rec['description'] | safe }}</td>
                     <td>{{ rec['score'] }}</td>
                 </tr>
                 {% endfor %}
@@ -47,6 +51,7 @@
     </div>
 </body>
 </html>
+
 
 
 
