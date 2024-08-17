@@ -184,7 +184,7 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     
     # Print the captured parameters for debugging
     print(f"Captured Parameters:\nPrice: {price}\nBedrooms: {bedrooms}\nLocation: {location}\nAgent Name: {agent_name}\nSubmission Type: {submission_type}")
-    
+
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
@@ -197,6 +197,14 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount'])
                                   else (row['sale_price'] if 'sale_price' in row and pd.notnull(row['sale_price'])
                                   else (row['rent'] if 'rent' in row and pd.notnull(row['rent']) else None)), axis=1)
+
+    # Filter out rows with inconsistent dimensionality
+    # For example, if 'features' column is a high-dimensional array, filter out rows with non-comparable data
+    df = df[df['features'].apply(lambda x: isinstance(x, (list, np.ndarray)) and len(x) == len(query_vector.toarray()[0]))]
+    
+    # Check if we have any rows left after filtering
+    if df.empty:
+        return []  # No recommendations if DataFrame is empty
 
     # Filter by price range if provided
     if price:
@@ -271,8 +279,12 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
 
     # Debugging info
     print(f"Length of weighted_similarities: {len(weighted_similarities)}")
-    indices = weighted_similarities.argsort()[-k:][::-1]
+    if len(weighted_similarities) < k:
+        k = len(weighted_similarities)
+    indices = np.argsort(weighted_similarities)[-k:][::-1]
     print(f"Selected indices: {indices}")
+    if indices.max() >= len(df):
+        raise IndexError("Selected indices exceed DataFrame bounds")
     recommendations = df.iloc[indices].copy()
     recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
 
