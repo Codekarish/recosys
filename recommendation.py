@@ -180,12 +180,7 @@ def get_distance(loc1, loc2):
 
 def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_categorical_data, df, k=25):
     # Parse the query
-    try:
-        price, bedrooms, location, agent_name, submission_type = parse_query(query)
-    except ValueError:
-        # Handle cases where parse_query returns fewer values
-        price, bedrooms, location, agent_name, submission_type = (None, None, None, None, None)
-
+    price, bedrooms, location, agent_name, submission_type = parse_query(query)
     query_keywords = extract_keywords(query)
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
@@ -194,19 +189,21 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     if len(similarities) != len(df):
         raise ValueError("Length of similarities does not match length of DataFrame")
 
-    # Handle missing price field and apply submission type filter
-    df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount']) 
+    # Handle missing price field
+    df['price_amount'] = df.apply(lambda row: row['amount'] if 'amount' in row and pd.notnull(row['amount'])
                                   else (row['sale_price'] if 'sale_price' in row and pd.notnull(row['sale_price'])
                                   else (row['rent'] if 'rent' in row and pd.notnull(row['rent']) else None)), axis=1)
 
-    if submission_type:
-        df = df[df['submission_type'].str.lower() == submission_type.lower()]
-
+    # Debugging info
+    print("DataFrame shape before price filtering:", df.shape)
+    
     # Filter by price range if provided
     if price:
         lower_bound = price * 0.5
         upper_bound = price * 1.5
         df = df[(df['price_amount'] <= upper_bound) & (df['price_amount'] >= lower_bound)]
+        print("DataFrame shape after price filtering:", df.shape)
+        
         # Recompute similarities after filtering
         filtered_indices = df.index
         similarities = similarities[filtered_indices]
@@ -249,15 +246,15 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     # Apply weights
     for i, row in df.iterrows():
         if 'location' in query_keywords and 'location' in df.columns:
-            weighted_similarities[i] += weights['location'] * 0.1
+            weighted_similarities[i] += weights['location'] * 0.55
         if 'property_type' in query_keywords and 'property_type' in df.columns:
-            weighted_similarities[i] += weights['property_type'] * 0.1
+            weighted_similarities[i] += weights['property_type'] * 0.3
         if 'size' in query_keywords and 'size' in df.columns:
-            weighted_similarities[i] += weights['size'] * 0.1
+            weighted_similarities[i] += weights['size'] * 0.2
         if 'submission_type' in query_keywords and 'submission_type' in df.columns:
-            weighted_similarities[i] += weights['submission_type'] * 0.1
+            weighted_similarities[i] += weights['submission_type'] * 0.4
         if 'price' in query_keywords and 'price_amount' in df.columns:
-            weighted_similarities[i] += weights['price'] * 0.1
+            weighted_similarities[i] += weights['price'] * 0.5
         if 'creation_date' in query_keywords and 'created_at' in df.columns:
             weighted_similarities[i] += weights['creation_date'] * 0.05
         if 'property_setting' in query_keywords and 'property_setting' in df.columns:
@@ -267,7 +264,10 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
         if 'user_metrics' in query_keywords and 'user_metrics' in df.columns:
             weighted_similarities[i] += weights['user_metrics'] * 0.05
 
+    # Debugging info
+    print("Length of weighted_similarities:", len(weighted_similarities))
     indices = weighted_similarities.argsort()[-k:][::-1]
+    print("Selected indices:", indices)
     recommendations = df.iloc[indices].copy()
     recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
 
