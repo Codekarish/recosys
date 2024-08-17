@@ -115,7 +115,7 @@ def preprocess_text(df, query_keywords):
     return vectorizer, X
 
 def encode_categorical_data(df):
-    encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+    encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     categorical_data = df[['property_type', 'listing_type', 'location']]
     encoded_categorical_data = encoder.fit_transform(categorical_data)
     return encoder, encoded_categorical_data
