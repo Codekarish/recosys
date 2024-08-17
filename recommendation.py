@@ -173,19 +173,17 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     query_vector = vectorizer.transform([query])
     similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
 
-    # Debug prints
-    print("Price:", price)
-    print("Bedrooms:", bedrooms)
-    print("Location:", location)
-    print("Agent Name:", agent_name)
-    print("Query Keywords:", query_keywords)
-    print("Query Vector Shape:", query_vector.shape)
-    print("Similarities Shape:", similarities.shape)
+    # Ensure the length of similarities matches the length of df
+    if len(similarities) != len(df):
+        raise ValueError("Length of similarities does not match length of DataFrame")
 
     # Filter by price range if provided
     if price:
         df['price_amount'] = df['price'].apply(lambda x: x['price'] if isinstance(x, dict) and 'price' in x else 0)
         df = df[(df['price_amount'] <= price * 1.1) & (df['price_amount'] >= price * 0.9)]
+        # Recompute similarities after filtering
+        filtered_indices = df.index
+        similarities = similarities[filtered_indices]
 
     # Calculate distances if location is provided
     if location:
@@ -204,20 +202,59 @@ def get_recommendations(query, vectorizer, tfidf_matrix, encoder, encoded_catego
     # Prioritize by agent name if provided
     if agent_name:
         if 'agent' in df.columns:
-            df = df[df['agent'].str.contains(agent_name, case=False, na=False)]
+            df['agent_match'] = df['agent'].apply(lambda x: x['name'].strip().lower() if isinstance(x, dict) and 'name' in x else 'unknown')
+            df = df[df['agent_match'] == agent_name]
 
-    df['score'] = similarities
-    top_k_indices = df.nlargest(k, 'score').index
-    top_k_properties = df.loc[top_k_indices]
+    # Apply weights to the similarity scores
+    weights = {
+        'location': 5,
+        'property_type': 4,
+        'size': 3,
+        'submission_type': 2,
+        'price': 1,
+        'creation_date': 0.5,
+        'property_setting': 0.5,
+        'customer_modifiers': 0.5,
+        'user_metrics': 0.5,
+    }
 
-    # Debug prints
-    print("Top K Properties (indices):", top_k_indices)
-    print("Top K Properties (sample):")
-    print(top_k_properties[['id', 'score', 'distance', 'bedrooms', 'price_amount']].head())
+    weighted_similarities = similarities.copy()
 
-    results = top_k_properties[['id', 'image', 'submission_type', 'location', 'bedrooms', 'agent', 'description', 'score']].copy()
-    results['description'] = results.apply(lambda row: format_description(row['description'], row['id']), axis=1)
-    return results
+    # Apply weights
+    for i, row in df.iterrows():
+        if 'location' in query_keywords and 'location' in df.columns:
+            weighted_similarities[i] += weights['location'] * 0.1
+        if 'property_type' in query_keywords and 'property_type' in df.columns:
+            weighted_similarities[i] += weights['property_type'] * 0.1
+        if 'size' in query_keywords and 'size' in df.columns:
+            weighted_similarities[i] += weights['size'] * 0.1
+        if 'submission_type' in query_keywords and 'submission_type' in df.columns:
+            weighted_similarities[i] += weights['submission_type'] * 0.1
+        if 'price' in query_keywords and 'price_amount' in df.columns:
+            weighted_similarities[i] += weights['price'] * 0.1
+        if 'creation_date' in query_keywords and 'created_at' in df.columns:
+            weighted_similarities[i] += weights['creation_date'] * 0.05
+        if 'property_setting' in query_keywords and 'property_setting' in df.columns:
+            weighted_similarities[i] += weights['property_setting'] * 0.05
+        if 'customer_modifiers' in query_keywords and 'customer_modifiers' in df.columns:
+            weighted_similarities[i] += weights['customer_modifiers'] * 0.05
+        if 'user_metrics' in query_keywords and 'user_metrics' in df.columns:
+            weighted_similarities[i] += weights['user_metrics'] * 0.05
+
+    indices = weighted_similarities.argsort()[-k:][::-1]
+    recommendations = df.iloc[indices].copy()
+    recommendations['score'] = (weighted_similarities[indices] * 100).round().astype(int)
+
+    # Extract and format data
+    if 'agent' in recommendations.columns:
+        recommendations['agent_name'] = recommendations['agent'].apply(lambda x: x['name'] if isinstance(x, dict) and 'name' in x else 'Unknown')
+    if 'price' in recommendations.columns:
+        recommendations['price_amount'] = recommendations['price'].apply(lambda x: x['price'] if isinstance(x, dict) and 'price' in x else 'N/A')
+        recommendations['price_label'] = recommendations['price'].apply(lambda x: x['label'] if isinstance(x, dict) and 'label' in x else '')
+        recommendations['price_currency'] = recommendations['price'].apply(lambda x: x['currency'] if isinstance(x, dict) and 'currency' in x else 'N/A')
+    recommendations['formatted_description'] = recommendations.apply(lambda row: format_description(row['description'], row['id']), axis=1)
+
+    return recommendations[['id', 'submission_type', 'bedrooms', 'agent_name', 'price_amount', 'price_label', 'price_currency', 'formatted_description', 'score']].to_dict('records')
 
 def main(query):
     url = 'https://sapi.hauzisha.co.ke/api/properties/search'
